@@ -96,7 +96,7 @@ func TestDeploySuccessOrdering(t *testing.T) {
 	}
 	scripts := testutil.LogScripts(t, log)
 
-	pull, build, up := scriptIndex(scripts, "'pull'"), scriptIndex(scripts, "'build'"), scriptIndex(scripts, "--wait-timeout")
+	pull, build, up := scriptIndex(scripts, "pull --ignore-buildable"), scriptIndex(scripts, "build --pull"), scriptIndex(scripts, "--wait-timeout")
 	if pull < 0 || build < 0 || up < 0 {
 		t.Fatalf("missing pull/build/up in scripts:\n%v", scripts)
 	}
@@ -144,7 +144,7 @@ func TestDeployRefusesUnmanaged(t *testing.T) {
 	log, sess := newSess(t,
 		testutil.Rule{Match: "printf", Out: home + "\n"},
 		testutil.Rule{Match: "test -e ", Code: 1},
-		testutil.Rule{Match: "'-q'", Out: "abc123\n"},
+		testutil.Rule{Match: "ps -q", Out: "abc123\n"},
 	)
 	var out bytes.Buffer
 	err := NewWithSession(m, sess, makeBundle(t), &out).Run(context.Background())
@@ -169,7 +169,7 @@ func TestDeployPreflightFailureStopsEarly(t *testing.T) {
 		t.Fatalf("want preflight error, got %v", err)
 	}
 	scripts := testutil.LogScripts(t, log)
-	for _, banned := range []string{"'down'", "'pull'", "'build'", "--wait-timeout", "prune"} {
+	for _, banned := range []string{"down", "pull", "build", "--wait-timeout", "prune"} {
 		if scriptsContain(scripts, banned) {
 			t.Errorf("destructive command %q ran after preflight failure:\n%v", banned, scripts)
 		}
@@ -183,7 +183,7 @@ func TestDeployLaterStackFailure(t *testing.T) {
 	m := makeManifest(t, manifest.PruneNone, "app1", "app2")
 	log, s := newSess(t,
 		testutil.Rule{Match: "printf", Out: home + "\n"},
-		testutil.Rule{Match: "'app2';;;--wait-timeout", Code: 1},
+		testutil.Rule{Match: "app2;;;--wait-timeout", Code: 1},
 	)
 	var out bytes.Buffer
 	err := NewWithSession(m, s, makeBundle(t), &out).Run(context.Background())
@@ -213,11 +213,11 @@ func TestDeployImagePruneAfterSuccess(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 	scripts := testutil.LogScripts(t, log)
-	up, prune := scriptIndex(scripts, "--wait-timeout"), scriptIndex(scripts, "'image'")
+	up, prune := scriptIndex(scripts, "--wait-timeout"), scriptIndex(scripts, "image")
 	if prune < 0 || prune < up {
 		t.Fatalf("image prune must run after up (up=%d prune=%d):\n%v", up, prune, scripts)
 	}
-	if scriptsContain(scripts, "'system'") {
+	if scriptsContain(scripts, "system") {
 		t.Errorf("system prune must not run with prune=images:\n%v", scripts)
 	}
 }

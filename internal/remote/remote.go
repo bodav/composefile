@@ -13,27 +13,14 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"al.essio.dev/pkg/shellescape"
 )
 
 // Quote single-quote escapes each argument and joins them with spaces. It is the
 // only helper used to interpolate untrusted strings into remote scripts.
 func Quote(args ...string) string {
-	var b strings.Builder
-	for i, a := range args {
-		if i > 0 {
-			b.WriteByte(' ')
-		}
-		b.WriteByte('\'')
-		for _, r := range a {
-			if r == '\'' {
-				b.WriteString(`'\''`)
-			} else {
-				b.WriteRune(r)
-			}
-		}
-		b.WriteByte('\'')
-	}
-	return b.String()
+	return shellescape.QuoteCommand(args)
 }
 
 // Script wraps inner in sh -c so every command runs under /bin/sh regardless of

@@ -2,4 +2,7 @@ module composefile
 
 go 1.26.5
 
-require gopkg.in/yaml.v3 v3.0.1 // indirect
+require (
+	al.essio.dev/pkg/shellescape v1.6.0
+	gopkg.in/yaml.v3 v3.0.1
+)

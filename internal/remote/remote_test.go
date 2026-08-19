@@ -68,9 +68,9 @@ func TestQuote(t *testing.T) {
 		args []string
 		want string
 	}{
-		{[]string{"docker"}, "'docker'"},
-		{[]string{"a", "b c"}, "'a' 'b c'"},
-		{[]string{"it's"}, `'it'\''s'`},
+		{[]string{"docker"}, "docker"},
+		{[]string{"a", "b c"}, "a 'b c'"},
+		{[]string{"it's"}, `'it'"'"'s'`},
 		{[]string{""}, "''"},
 		{[]string{"$HOME"}, "'$HOME'"},
 		{[]string{"a;rm -rf /"}, "'a;rm -rf /'"},
@@ -191,10 +191,10 @@ func TestStreamWritesToOutAndTeesLog(t *testing.T) {
 func TestPrereqSuccess(t *testing.T) {
 	s, _, _ := newFake(t,
 		rule{match: "uname -s", out: "Linux\n"},
-		rule{match: "command -v 'sh'", out: "/bin/sh\n"},
-		rule{match: "command -v 'tar'", out: "/bin/tar\n"},
-		rule{match: "command -v 'gzip'", out: "/bin/gzip\n"},
-		rule{match: "command -v 'docker'", out: "/usr/bin/docker\n"},
+		rule{match: "command -v sh", out: "/bin/sh\n"},
+		rule{match: "command -v tar", out: "/bin/tar\n"},
+		rule{match: "command -v gzip", out: "/bin/gzip\n"},
+		rule{match: "command -v docker", out: "/usr/bin/docker\n"},
 		rule{match: "docker compose version", out: "Docker Compose version v2.29.0\n"},
 		rule{match: "docker info", out: "Server Version: 26.0\n"},
 	)
@@ -206,10 +206,10 @@ func TestPrereqSuccess(t *testing.T) {
 func TestPrereqAcceptsNewerCompose(t *testing.T) {
 	s, _, _ := newFake(t,
 		rule{match: "uname -s", out: "Linux\n"},
-		rule{match: "command -v 'sh'", out: "/bin/sh\n"},
-		rule{match: "command -v 'tar'", out: "/bin/tar\n"},
-		rule{match: "command -v 'gzip'", out: "/bin/gzip\n"},
-		rule{match: "command -v 'docker'", out: "/usr/bin/docker\n"},
+		rule{match: "command -v sh", out: "/bin/sh\n"},
+		rule{match: "command -v tar", out: "/bin/tar\n"},
+		rule{match: "command -v gzip", out: "/bin/gzip\n"},
+		rule{match: "command -v docker", out: "/usr/bin/docker\n"},
 		rule{match: "docker compose version", out: "Docker Compose version v5.4.0\n"},
 		rule{match: "docker info", out: "Server Version: 26.0\n"},
 	)
@@ -252,10 +252,10 @@ func TestPrereqRejectsNonLinux(t *testing.T) {
 func TestPrereqRejectsNoDockerAccess(t *testing.T) {
 	s, _, _ := newFake(t,
 		rule{match: "uname -s", out: "Linux\n"},
-		rule{match: "command -v 'sh'", out: "/bin/sh\n"},
-		rule{match: "command -v 'tar'", out: "/bin/tar\n"},
-		rule{match: "command -v 'gzip'", out: "/bin/gzip\n"},
-		rule{match: "command -v 'docker'", out: "/usr/bin/docker\n"},
+		rule{match: "command -v sh", out: "/bin/sh\n"},
+		rule{match: "command -v tar", out: "/bin/tar\n"},
+		rule{match: "command -v gzip", out: "/bin/gzip\n"},
+		rule{match: "command -v docker", out: "/usr/bin/docker\n"},
 		rule{match: "docker compose version", out: "Docker Compose version v2.29.0\n"},
 		rule{match: "docker info", code: 1},
 	)

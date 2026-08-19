@@ -9,10 +9,10 @@ func TestCommandStructure(t *testing.T) {
 	c := New("database", "/ws/database/compose.yaml", "/ws/database/compose.prod.yaml")
 	got := c.Up(180)
 	for _, want := range []string{
-		"docker", "compose", "--project-name", "'database'",
-		"--file", "'/ws/database/compose.yaml'",
-		"--file", "'/ws/database/compose.prod.yaml'",
-		"up", "-d", "--remove-orphans", "--wait", "--wait-timeout", "'180'",
+		"docker compose --project-name database",
+		"--file /ws/database/compose.yaml",
+		"--file /ws/database/compose.prod.yaml",
+		"up -d --remove-orphans --wait --wait-timeout 180",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("Up missing %q in:\n%s", want, got)
@@ -62,8 +62,9 @@ func TestHasBuild(t *testing.T) {
 	c := New("app", "/ws/app/compose.yaml")
 	got := c.HasBuild()
 	for _, want := range []string{
-		"docker", "compose", "--project-name", "'app'",
-		"'config'", "'--format'", "'json'",
+		"docker compose --project-name app",
+		"--file /ws/app/compose.yaml",
+		"config --format json",
 		"grep -q '\"build\"'", "echo yes", "echo no",
 	} {
 		if !strings.Contains(got, want) {
