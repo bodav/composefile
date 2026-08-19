@@ -25,6 +25,16 @@ v2. The SSH user must be able to run Docker without `sudo`.
 ## Install
 
 ```sh
+curl -fsSL https://raw.githubusercontent.com/bodav/composefile/main/install.sh | sh
+```
+
+Installs the latest release binary to `~/.local/bin`. Set `COMPOSEFILE_VERSION`
+to pin a specific tag, or `COMPOSEFILE_INSTALL_DIR` to change the install
+directory.
+
+To build from source instead:
+
+```sh
 go build -o composefile ./cmd/composefile   # or: make build
 ```
 
@@ -244,7 +254,7 @@ commands.
 
 ```sh
 make build          # build ./bin/composefile (override VERSION=v1.0.0)
-make install        # install to ~/.local/bin (override GOBIN=...)
+make install        # install to default GOBIN (~/go/bin; override GOBIN=...)
 make vet            # go vet ./...
 make test           # go test ./...
 make test-race      # go test -race ./...
