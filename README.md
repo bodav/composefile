@@ -49,7 +49,7 @@ composefile init
 # 3. Create a retained release bundle.
 composefile bundle
 
-# 4. Deploy (preflights everything before changing anything).
+# 4. Deploy (preflights everything; deploys only changed stacks).
 composefile apply
 
 # 5. Check health of the deployed stacks.
@@ -65,8 +65,9 @@ composefile diff
 | --- | --- |
 | `composefile init` | Write a starter `composefile.yaml`; refuses to overwrite an existing one. |
 | `composefile bundle` | Validate the manifest and write `./.bundle/<timestamp>-<name>.tar.gz`. |
-| `composefile apply` | Build a bundle, preflight, and deploy every stack in order. |
-| `composefile apply --bundle ./.bundle/<bundle>.tar.gz` | Redeploy an existing retained bundle. |
+| `composefile apply [--all]` | Build a bundle, preflight, and deploy the changed stacks in order. |
+| `composefile apply --all` | Force-deploy every stack regardless of changes. |
+| `composefile apply --bundle ./.bundle/<bundle>.tar.gz` | Redeploy an existing retained bundle (only its changed stacks, unless `--all`). |
 | `composefile status` | Report per-stack bundle, service counts, and health. |
 | `composefile diff` | Build a bundle and compare it with the deployed bundle; exits `1` when anything differs. |
 | `composefile purge` | Delete all retained bundles in `./.bundle`. |
@@ -153,8 +154,10 @@ file-level differences (added, modified, deleted) between the two.
 - Compares file contents and normalized mode (executable vs not); timestamps are
   ignored, so untouched sources produce no noise.
 - The candidate bundle is retained in `./.bundle`, matching `bundle`/`apply`.
-- Exits `0` when the bundles are identical and `1` when anything differs, so
-  `composefile diff && composefile apply` deploys only when changes exist.
+- Exits `0` when the bundles are identical and `1` when anything differs.
+- `apply` uses the same comparison and deploys only the stacks whose bundled
+  source differs from what each stack last deployed, so `diff` and `apply` agree
+  on what changed.
 - If the deployment set has never been deployed, every file is reported as
   added and it exits `1`.
 - If the deployed bundle is not retained locally, it errors with a clear message
@@ -225,13 +228,26 @@ those bind targets.
    remote layout, refuse unmanaged pre-existing projects with matching names,
    upload and stage the bundle, and run `docker compose config` for every
    stack. If anything fails, staging is removed and nothing is changed.
-3. **Deploy each stack, in manifest order** — stop the current project, replace
-   the fixed workspace, copy the stack source, `pull --ignore-buildable`,
+3. **Deploy changed stacks, in manifest order** — a stack is deployed when it
+   has never been deployed, when its recorded bundle is no longer retained
+   locally, or when its bundled source differs (by content or executable bit)
+   from the bundle that last deployed it. Unchanged stacks are left running.
+   For each deployed stack: stop the current project, replace the fixed
+   workspace, copy the stack source, `pull --ignore-buildable`,
    `build --pull`, then `up -d --remove-orphans --wait --wait-timeout <s>`.
    Output streams to the terminal and the remote log. Stops on the first
    failure; earlier successful stacks are left running.
 4. **Completion** — record the last successful deployment, run the configured
    prune exactly once, remove staging data.
+
+Change detection uses each stack's per-stack deployment metadata
+(`metadata/stacks/<stack>.json`, which records the bundle that last deployed
+that stack) and the same content/mode comparison as `diff`; timestamps are
+ignored. A stack whose recorded bundle is missing locally (for example after
+`composefile purge`) is treated as changed and deployed with a note rather than
+failing. Pass `--all` to bypass detection and deploy every stack, which is also
+what happens on a first-ever `apply`. The set-level `metadata/deployment.json`
+is still updated on every successful apply so `diff` keeps a valid baseline.
 
 On failure, the failed stack's workspace and remote log are retained, and the
 failure report prints the stage, stack, log path, container state, and recovery

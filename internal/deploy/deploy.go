@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -23,6 +24,7 @@ type Deployer struct {
 	bundlePath string
 	out        io.Writer
 	root       string
+	forceAll   bool
 }
 
 // New builds a Deployer that connects via the real ssh executable.
@@ -35,23 +37,45 @@ func NewWithSession(m *manifest.Manifest, sess *remote.Session, bundlePath strin
 	return &Deployer{m: m, sess: sess, bundlePath: bundlePath, out: out}
 }
 
+// WithForceAll disables change detection and deploys every stack.
+func (d *Deployer) WithForceAll() *Deployer {
+	d.forceAll = true
+	return d
+}
+
 // bundleName returns the archive filename (base name of bundlePath).
 func (d *Deployer) bundleName() string { return filepath.Base(d.bundlePath) }
 
 func (d *Deployer) bundleDir() string { return BundleDir(d.bundleName()) }
 
-// Run preflights the whole deployment, deploys every stack in manifest order,
-// and completes. Stops at the first failure.
+// Run preflights the whole deployment, deploys the changed stacks in manifest
+// order (every stack when forceAll is set), and completes. Stops at the first
+// failure.
 func (d *Deployer) Run(ctx context.Context) error {
 	if err := d.preflight(ctx); err != nil {
 		d.cleanupStaging(ctx)
 		return fmt.Errorf("preflight: %w", err)
 	}
-	fmt.Fprintf(d.out, "preflight passed for %d stack(s); deploying\n", len(d.m.Stacks))
+	fmt.Fprintf(d.out, "preflight passed for %d stack(s)\n", len(d.m.Stacks))
 	fmt.Fprintf(d.out, "deployment root: %s\n", d.root)
+
+	changed, err := d.changedStacks(ctx)
+	if err != nil {
+		d.cleanupStaging(ctx)
+		return fmt.Errorf("detect changes: %w", err)
+	}
+	if len(changed) == 0 {
+		fmt.Fprintln(d.out, "all stacks unchanged; nothing to deploy")
+	} else {
+		fmt.Fprintf(d.out, "%d of %d stack(s) changed; deploying changed stacks only\n", len(changed), len(d.m.Stacks))
+	}
 
 	for i := range d.m.Stacks {
 		s := &d.m.Stacks[i]
+		if !changed[s.Name] {
+			fmt.Fprintf(d.out, "\n== stack %q (%d/%d): unchanged; skipping ==\n", s.Name, i+1, len(d.m.Stacks))
+			continue
+		}
 		fmt.Fprintf(d.out, "\n== deploying stack %q (%d/%d) ==\n", s.Name, i+1, len(d.m.Stacks))
 		if err := d.deployStack(ctx, s); err != nil {
 			d.cleanupStaging(ctx)
@@ -61,6 +85,53 @@ func (d *Deployer) Run(ctx context.Context) error {
 	}
 
 	return d.complete(ctx)
+}
+
+// changedStacks reports which stacks need deployment: every stack when forceAll
+// is set, otherwise only those never deployed, whose recorded bundle is no
+// longer retained locally, or whose bundled source differs from the bundle that
+// last deployed them.
+func (d *Deployer) changedStacks(ctx context.Context) (map[string]bool, error) {
+	changed := make(map[string]bool, len(d.m.Stacks))
+	if d.forceAll {
+		for i := range d.m.Stacks {
+			changed[d.m.Stacks[i].Name] = true
+		}
+		return changed, nil
+	}
+
+	cmp := bundle.NewComparer()
+	retainedDir := filepath.Join(d.m.Dir, bundle.DefaultBundleDir)
+	for i := range d.m.Stacks {
+		s := &d.m.Stacks[i]
+		metaPath := StackMetaPath(d.root, s.Name)
+		hasMeta, err := d.sess.Exists(ctx, metaPath)
+		if err != nil {
+			return nil, fmt.Errorf("check metadata for %q: %w", s.Name, err)
+		}
+		if !hasMeta {
+			changed[s.Name] = true
+			continue
+		}
+		var meta StackMeta
+		if err := ReadJSON(ctx, d.sess, metaPath, &meta); err != nil {
+			return nil, fmt.Errorf("read metadata for %q: %w", s.Name, err)
+		}
+		oldPath := filepath.Join(retainedDir, meta.Bundle)
+		if _, err := os.Stat(oldPath); err != nil {
+			fmt.Fprintf(d.out, "  stack %q: recorded bundle %s is not retained locally; deploying\n", s.Name, meta.Bundle)
+			changed[s.Name] = true
+			continue
+		}
+		changes, err := cmp.CompareStack(d.bundlePath, oldPath, s.Name)
+		if err != nil {
+			return nil, fmt.Errorf("compare stack %q: %w", s.Name, err)
+		}
+		if len(changes) > 0 {
+			changed[s.Name] = true
+		}
+	}
+	return changed, nil
 }
 
 // preflight performs every check before any running stack is changed.

@@ -396,17 +396,62 @@ func archiveEntries(path string) (map[string]bEntry, error) {
 // compared by content bytes and normalized mode (executable vs not); timestamps
 // are ignored so untouched sources never produce noise.
 func Compare(newPath, oldPath string) ([]Change, error) {
-	newEntries, err := archiveEntries(newPath)
-	if err != nil {
-		return nil, fmt.Errorf("bundle: read new %s: %w", newPath, err)
+	return NewComparer().Compare(newPath, oldPath)
+}
+
+// CompareStack reports the file-level differences within one stack's subtree
+// between two bundles, ignoring every other stack. Path comparison matches
+// Compare.
+func CompareStack(newPath, oldPath, stackName string) ([]Change, error) {
+	return NewComparer().CompareStack(newPath, oldPath, stackName)
+}
+
+// Comparer compares bundle archives while caching parsed entry maps, so one
+// bundle compared against many others is only read and decompressed once.
+type Comparer struct {
+	entries map[string]map[string]bEntry
+}
+
+// NewComparer returns a Comparer with an empty entry cache.
+func NewComparer() *Comparer { return &Comparer{entries: map[string]map[string]bEntry{}} }
+
+func (c *Comparer) entryMap(path string) (map[string]bEntry, error) {
+	if m, ok := c.entries[path]; ok {
+		return m, nil
 	}
-	oldEntries, err := archiveEntries(oldPath)
+	m, err := archiveEntries(path)
 	if err != nil {
-		return nil, fmt.Errorf("bundle: read old %s: %w", oldPath, err)
+		return nil, fmt.Errorf("bundle: read %s: %w", path, err)
+	}
+	c.entries[path] = m
+	return m, nil
+}
+
+// Compare reports the file-level differences between two bundles.
+func (c *Comparer) Compare(newPath, oldPath string) ([]Change, error) {
+	return c.compare(newPath, oldPath, "")
+}
+
+// CompareStack reports the file-level differences within one stack's subtree.
+func (c *Comparer) CompareStack(newPath, oldPath, stackName string) ([]Change, error) {
+	return c.compare(newPath, oldPath, ArchiveDir+"/"+stackName+"/")
+}
+
+func (c *Comparer) compare(newPath, oldPath, prefix string) ([]Change, error) {
+	newEntries, err := c.entryMap(newPath)
+	if err != nil {
+		return nil, err
+	}
+	oldEntries, err := c.entryMap(oldPath)
+	if err != nil {
+		return nil, err
 	}
 
 	var changes []Change
 	for name, e := range newEntries {
+		if prefix != "" && !strings.HasPrefix(name, prefix) {
+			continue
+		}
 		if old, ok := oldEntries[name]; !ok {
 			changes = append(changes, changeFromPath(name, ChangeAdd))
 		} else if !sameEntry(old, e) {
@@ -414,6 +459,9 @@ func Compare(newPath, oldPath string) ([]Change, error) {
 		}
 	}
 	for name := range oldEntries {
+		if prefix != "" && !strings.HasPrefix(name, prefix) {
+			continue
+		}
 		if _, ok := newEntries[name]; !ok {
 			changes = append(changes, changeFromPath(name, ChangeDelete))
 		}

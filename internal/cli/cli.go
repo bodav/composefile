@@ -84,7 +84,7 @@ func usage() string {
 Usage:
   composefile init                    create a starter composefile.yaml
   composefile bundle                  create ./.bundle/<timestamp>-<name>.tar.gz
-  composefile apply [--bundle FILE]   preflight and deploy all stacks
+  composefile apply [--all] [--bundle FILE]   preflight and deploy changed stacks
   composefile status                  report stack health
   composefile diff                    compare a new bundle with the deployed one
   composefile purge                   delete all retained bundles in ./.bundle

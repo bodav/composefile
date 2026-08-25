@@ -11,9 +11,10 @@ import (
 	"composefile/internal/manifest"
 )
 
-// runApply preflights and deploys every stack in manifest order.
+// runApply preflights and deploys changed stacks in manifest order.
 func runApply(ctx context.Context, env Env, args []string) int {
 	var bundleArg string
+	forceAll := false
 	i := 0
 	for i < len(args) {
 		switch args[i] {
@@ -24,8 +25,11 @@ func runApply(ctx context.Context, env Env, args []string) int {
 			}
 			bundleArg = args[i+1]
 			i += 2
+		case "--all":
+			forceAll = true
+			i++
 		case "--help", "-h":
-			fmt.Fprintln(env.Stdout, "Usage: composefile apply [--bundle FILE]")
+			fmt.Fprintln(env.Stdout, "Usage: composefile apply [--all] [--bundle FILE]")
 			return ExitOK
 		default:
 			fmt.Fprintf(env.Stderr, "composefile: unknown apply argument %q\n", args[i])
@@ -59,6 +63,9 @@ func runApply(ctx context.Context, env Env, args []string) int {
 	}
 
 	d := deploy.New(m, bundlePath, env.Stdout)
+	if forceAll {
+		d.WithForceAll()
+	}
 	if err := d.Run(ctx); err != nil {
 		fmt.Fprintf(env.Stderr, "composefile: apply failed: %v\n", err)
 		return ExitError

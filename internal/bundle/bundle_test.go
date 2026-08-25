@@ -394,6 +394,74 @@ func TestCompareEmptyOldBaseline(t *testing.T) {
 	}
 }
 
+func TestCompareStackScopedToOneStack(t *testing.T) {
+	oldM := buildFixture(t, map[string]map[string]mode{
+		"app": {"compose.yaml": {mode: 0o644}, "to_delete.txt": {mode: 0o644}},
+		"db":  {"compose.yaml": {mode: 0o644}},
+	})
+	oldPath, err := Build(oldM, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	newM := buildFixture(t, map[string]map[string]mode{
+		"app": {"compose.yaml": {mode: 0o644}, "added.txt": {mode: 0o644}},
+		"db":  {"compose.yaml": {mode: 0o644, data: "changed"}},
+	})
+	newPath, err := Build(newM, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	appChanges, err := CompareStack(newPath, oldPath, "app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changesHave(appChanges, ChangeAdd, "app", "added.txt") {
+		t.Errorf("missing add added.txt: %+v", appChanges)
+	}
+	if !changesHave(appChanges, ChangeDelete, "app", "to_delete.txt") {
+		t.Errorf("missing delete to_delete.txt: %+v", appChanges)
+	}
+	for _, c := range appChanges {
+		if c.Stack != "app" {
+			t.Errorf("CompareStack(app) leaked stack %q: %+v", c.Stack, appChanges)
+		}
+	}
+
+	dbChanges, err := CompareStack(newPath, oldPath, "db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changesHave(dbChanges, ChangeModify, "db", "compose.yaml") {
+		t.Errorf("missing modify db compose.yaml: %+v", dbChanges)
+	}
+}
+
+func TestCompareStackIdentical(t *testing.T) {
+	m := buildFixture(t, map[string]map[string]mode{
+		"app": {"compose.yaml": {mode: 0o644}},
+		"db":  {"compose.yaml": {mode: 0o644, data: "same"}},
+	})
+	one, err := Build(m, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	two, err := Build(m, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"app", "db"} {
+		changes, err := CompareStack(two, one, name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(changes) != 0 {
+			t.Fatalf("stack %s: expected no changes, got %+v", name, changes)
+		}
+	}
+}
+
 // changesHave reports whether a change with the given stack/rel is present.
 func changesHave(changes []Change, kind ChangeKind, stack, rel string) bool {
 	for _, c := range changes {
